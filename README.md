@@ -1,4 +1,4 @@
-This repository includes the python code for the computation of Anna Glowski's Senior Thesis. Each file is titled after the chapter of the thesis that it was used for computation.
+This repository includes the python code for the computation of Anna Glowski's Senior Thesis. Each file is titled after the chapter of the thesis that it was used for computation. The "Location Mapping" code was used to map the location of all activities for their respective chapters.
 
 Chapter 2: Data Collection and Calculation 
   - Data Collection: imports wait time data from Thrill Data, collects the location of each activity from Google Maps API
