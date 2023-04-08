@@ -1,0 +1,1191 @@
+{
+ "cells": [
+  {
+   "cell_type": "markdown",
+   "id": "695946a5",
+   "metadata": {},
+   "source": [
+    "### Importing "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 1,
+   "id": "8c46c3da",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import matplotlib.pyplot as plt"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 2,
+   "id": "42739214",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "import googlemaps\n",
+    "from datetime import datetime\n",
+    "\n",
+    "gmaps = googlemaps.Client(key= # Google Maps API Key here)\n"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 3,
+   "id": "65de5bde",
+   "metadata": {},
+   "outputs": [
+    {
+     "name": "stdout",
+     "output_type": "stream",
+     "text": [
+      "Current working directory: /Users/annaglowski\n"
+     ]
+    }
+   ],
+   "source": [
+    "import pandas as pd\n",
+    "import csv\n",
+    "import os\n",
+    "import numpy as np\n",
+    "\n",
+    "# Get the current working directory\n",
+    "cwd = os.getcwd()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "cdfdbcaf",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "60b69c8e",
+   "metadata": {},
+   "source": [
+    "# Ride Data Functions"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "66a1030d",
+   "metadata": {},
+   "source": [
+    "### Average Hourly Wait Time (per month)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 4,
+   "id": "5e29ca1c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# calculate the average wait time across the hour (take the data from 5 min increments to one hour increments)\n",
+    "\n",
+    "# returns a vector of 12 months each with 24 hours of data\n",
+    "\n",
+    "def hourly_average_wt(df):\n",
+    "    df['Date/Time'] = pd.to_datetime(df['Date/Time'])\n",
+    "    df['hour'] = df['Date/Time'].dt.hour\n",
+    "    \n",
+    "    # average wait time by hour (1x24)\n",
+    "    hourly_wt_av = []\n",
+    "    \n",
+    "    for t in range(0, 24):\n",
+    "        temp = 0\n",
+    "        j = 0\n",
+    "        for hour, wait in zip(df['hour'], df['Wait Time']):\n",
+    "            if hour == t: \n",
+    "                j = j + 1\n",
+    "                temp = temp + wait\n",
+    "        if j == 0:\n",
+    "            hourly_wt_av.append(0)\n",
+    "        else:\n",
+    "            hourly_wt_av.append(temp/j)\n",
+    "        \n",
+    "    return hourly_wt_av\n",
+    "        "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4b7d10da",
+   "metadata": {},
+   "source": [
+    "### Average Hourly Wait Time (for full year)"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 5,
+   "id": "3581a68c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# calculate the average hourly wait time over all months of the year for each ride\n",
+    "\n",
+    "# send in the monthly hourly wait time average array, the months array of data and the number \n",
+    "# of months that have data\n",
+    "#returns one vector of 24 hours (representing the ride itself over the full year)\n",
+    "def hourly_av_wt_ride(hourly_wt_av, num_months):\n",
+    "    \n",
+    "    ride_hourly_wt_av = np.ones(24)\n",
+    "\n",
+    "    for month in range(0, num_months):\n",
+    "        temp = 0\n",
+    "        for t in range(0, 24):\n",
+    "            temp = ride_hourly_wt_av[t] + hourly_wt_av[month][t]\n",
+    "            ride_hourly_wt_av[t] = temp\n",
+    "\n",
+    "            \n",
+    "    ride_hourly_wt_av = ride_hourly_wt_av/num_months\n",
+    "    \n",
+    "    return ride_hourly_wt_av\n",
+    "    "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6f196685",
+   "metadata": {},
+   "source": [
+    "### Single Wait Time Average"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 6,
+   "id": "24577b02",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "def overall_wt_av_ride(ride_yr_hrly_wt_av):\n",
+    "    temp = 0\n",
+    "    for i in range(7,24):\n",
+    "        temp = temp + ride_yr_hrly_wt_av[i]\n",
+    "\n",
+    "    return temp/16\n",
+    "    "
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "50a7d058",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "907d0077",
+   "metadata": {},
+   "source": [
+    "# Ride Data Input:"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 7,
+   "id": "78876c18",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "hrly_wt_data = pd.DataFrame()\n",
+    "overall_wt_data = []\n",
+    "ride_time = []"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ca5a27f4",
+   "metadata": {},
+   "source": [
+    "### Entrance"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 47,
+   "id": "414978ad",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "entrance = gmaps.find_place('Disneyland Railroad - Main Street Entrance California', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "entrance_yr_hrly_wt_av = np.zeros(24)\n",
+    "\n",
+    "hrly_wt_data['Entrance'] = entrance_yr_hrly_wt_av\n",
+    "\n",
+    "overall_wt_data.append(0)\n",
+    "\n",
+    "ride_time.append(0)"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8c67a69b",
+   "metadata": {},
+   "source": [
+    "### Small World"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 48,
+   "id": "3814f5cd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "\n",
+    "# load data\n",
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', \n",
+    "          #'nov', \n",
+    "          #'dec'\n",
+    "         ]\n",
+    "\n",
+    "num_months = 10 \n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Small_World/Small_World_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Average wait times by hour for one year\n",
+    "small_world_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months) \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Its a Small World'] = small_world_yr_hrly_wt_av\n",
+    "\n",
+    "# Average wait time overall (single number)\n",
+    "small_world_overall_wt_av = overall_wt_av_ride(small_world_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(small_world_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(14)\n",
+    "\n",
+    "# Get coordinates\n",
+    "small_world = gmaps.find_place('Its a small world', 'textquery', fields = ['formatted_address', 'geometry','place_id'])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "58142237",
+   "metadata": {},
+   "source": [
+    "### Space Mountain"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 49,
+   "id": "8c57688e",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Space_Mt/Space_Mt_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "    \n",
+    "# hourly wait time data \n",
+    "space_mt_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)    \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Space Mountain'] = space_mt_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (Single number)\n",
+    "space_mt_overall_wt_av = overall_wt_av_ride(space_mt_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(space_mt_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(5)\n",
+    "\n",
+    "# Get coordinates\n",
+    "space_mt = gmaps.find_place('Space Mountain (Disneyland)', 'textquery', fields = ['formatted_address', 'geometry','place_id'])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "6d1d07bb",
+   "metadata": {},
+   "source": [
+    "### Star Wars: Rise of Resistance"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 50,
+   "id": "a9bde215",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Star_Wars/Star_Wars_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# hourly wait time average\n",
+    "star_wars_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Star Wars: Rise of Resistance'] = star_wars_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (single number)\n",
+    "star_wars_overall_wt_av = overall_wt_av_ride(star_wars_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(star_wars_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(18)\n",
+    "\n",
+    "# Get coordinates\n",
+    "star_wars = gmaps.find_place('Star Wars: Rise of Resistance', 'textquery', fields = ['formatted_address', 'geometry','place_id'])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "39a46cc1",
+   "metadata": {},
+   "source": [
+    "### Indianna Jones Adventure"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 51,
+   "id": "ae4920bc",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Indy_Jones/Indy_Jones_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Hourly average wait time\n",
+    "indy_jones_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Indiana Jones Adventure'] = indy_jones_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (single number)\n",
+    "indy_jones_overall_wt_av = overall_wt_av_ride(indy_jones_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(indy_jones_overall_wt_av)\n",
+    "\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(10)\n",
+    "\n",
+    "# Get coordinates\n",
+    "indy_jones = gmaps.find_place('Indiana Jones Adventure', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "170618b2",
+   "metadata": {},
+   "source": [
+    "### Pirates of the Caribbean "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 52,
+   "id": "ffd2687c",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Pirates/Pirates_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Hourly average wait time\n",
+    "pirates_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Pirates of the Caribbean'] = pirates_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time\n",
+    "pirates_overall_wt_av = overall_wt_av_ride(pirates_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(pirates_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(10)\n",
+    "\n",
+    "# Get coordinates\n",
+    "pirates = gmaps.find_place('Pirates of the Caribbean (Disneyland)', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7c70cafb",
+   "metadata": {},
+   "source": [
+    "### Splash Mountain"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 53,
+   "id": "3613ecf3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Splash_Mt/Splash_Mt_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Hourly average wait time\n",
+    "splash_mt_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# Add to df\n",
+    "hrly_wt_data['Splash Mountain'] = splash_mt_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (single number)\n",
+    "splash_mt_overall_wt_av = overall_wt_av_ride(splash_mt_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(splash_mt_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(11)\n",
+    "\n",
+    "# Get coordinates\n",
+    "splash_mt = gmaps.find_place('Splash Mountain (Disneyland)', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "b703cf1a",
+   "metadata": {},
+   "source": [
+    "### Big Thunder Mountain Railroad"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 15,
+   "id": "668033d6",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Big_Thunder/Big_Thunder_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Hourly average wait time\n",
+    "big_thunder_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# Add to tdf\n",
+    "hrly_wt_data['Big Thunder Mountain Railroad'] = big_thunder_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (single number)\n",
+    "big_thunder_overall_wt_av = overall_wt_av_ride(big_thunder_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(big_thunder_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(3.5)\n",
+    "\n",
+    "# Get Coordinates\n",
+    "big_thunder = gmaps.find_place('Big Thunder Mountain Railroad (California)', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1ef1ddcd",
+   "metadata": {},
+   "source": [
+    "### Matterhorn Bobsleds"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 54,
+   "id": "bf7ff085",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "months = ['jan', 'feb', 'mar', 'apr', 'may', 'june', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec']\n",
+    "\n",
+    "num_months = 12\n",
+    "\n",
+    "hourly_wt_av = []\n",
+    "\n",
+    "for month in months:\n",
+    "    df = pd.read_csv(r'/Users/annaglowski/Desktop/Thesis/Matterhorn/Matterhorn_%s.csv' % month.title())\n",
+    "    hourly_wt_av.append(hourly_average_wt(df))\n",
+    "\n",
+    "# Hourly average wait time\n",
+    "matterhorn_yr_hrly_wt_av = hourly_av_wt_ride(hourly_wt_av, num_months)  \n",
+    "\n",
+    "# add to df\n",
+    "hrly_wt_data['Matterhorn Bobsleds'] = matterhorn_yr_hrly_wt_av\n",
+    "\n",
+    "# Overall average wait time (single number)\n",
+    "matterhorn_overall_wt_av = overall_wt_av_ride(matterhorn_yr_hrly_wt_av)\n",
+    "\n",
+    "# Add to df\n",
+    "overall_wt_data.append(matterhorn_overall_wt_av)\n",
+    "\n",
+    "# ride time\n",
+    "ride_time.append(4)\n",
+    "\n",
+    "# Get coordinates\n",
+    "matterhorn = gmaps.find_place('Matterhorn Bobsleds', 'textquery', fields = ['formatted_address', 'geometry','place_id'])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "380a0134",
+   "metadata": {},
+   "source": [
+    "### Location of Restaurant Options"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 57,
+   "id": "4c0d1936",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "plaza_inn = gmaps.find_place('Plaza Inn Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "galactic_grill = gmaps.find_place('Galactic Grill Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "daisy_dinner = gmaps.find_place(\"Daisy's Dinner Disneyland\", 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "blue_bayou = gmaps.find_place('Blue Bayou Restaurant Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "golden = gmaps.find_place('The Golden Horseshoe Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "bengal_bbq = gmaps.find_place('Bengal Barbeque Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "tavern = gmaps.find_place('Red Rose Tavern Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n",
+    "\n",
+    "troubadour = gmaps.find_place('Troubadour Tavern Disneyland', 'textquery', fields = ['formatted_address', 'geometry','place_id'])\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4bb15bff",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "3ca4078a",
+   "metadata": {},
+   "source": [
+    "## Introduction Graph - Average Wait time by Hour"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 60,
+   "id": "c253a70f",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [
+    {
+     "data": {
+      "image/png": "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\n",
+      "text/plain": [
+       "<Figure size 432x288 with 1 Axes>"
+      ]
+     },
+     "metadata": {
+      "needs_background": "light"
+     },
+     "output_type": "display_data"
+    }
+   ],
+   "source": [
+    "hour = [0, 1, 2, 3,4 ,5,6,7,8,9,10,11,12,13,14,15,16,17,18,19,20,21,22,23]\n",
+    "\n",
+    "\n",
+    "rides = ['Entrance', 'Its a Small World', 'Space Mountain', 'Star Wars: Rise of Resistance', 'Indiana Jones Adventure', \n",
+    "         'Pirates of the Caribbean', 'Splash Mountain', 'Big Thunder Mountain Railway', 'Matterhorn Bobsleds']\n",
+    "\n",
+    "fig = plt.figure()\n",
+    "ax = plt.subplot(111)\n",
+    "\n",
+    "ax.plot(hour, hrly_wt_data)\n",
+    "\n",
+    "# Shrink current axis by 20%\n",
+    "box = ax.get_position()\n",
+    "ax.set_position([box.x0, box.y0, box.width * 0.8, box.height])\n",
+    "\n",
+    "# Put a legend to the right of the current axis\n",
+    "ax.legend(rides, loc='center left', bbox_to_anchor=(1, 0.5))\n",
+    "\n",
+    "plt.title('Average Wait Time by Hour')\n",
+    "plt.xlabel('Hour of Day')\n",
+    "plt.ylabel('Wait Time (min)')\n",
+    "\n",
+    "plt.savefig(\"wt_data.pdf\", format=\"pdf\", bbox_inches=\"tight\")\n",
+    "plt.show()"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "8c0797ab",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f07a7153",
+   "metadata": {},
+   "source": [
+    "# Distance Matrix - Initial and Time Formulation"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "ef684471",
+   "metadata": {},
+   "source": [
+    "### Creating a Dataframe of all Rides with Lat and Long"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 61,
+   "id": "2c50bedd",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "\n",
+    "data = [['Entrance', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Its a Small World', small_world['candidates'][0]['geometry']['location']['lat'],small_world['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Space Mountain', space_mt['candidates'][0]['geometry']['location']['lat'], space_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Star Wars: Rise of Resistance', star_wars['candidates'][0]['geometry']['location']['lat'], star_wars['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Indiana Jones Adventure', indy_jones['candidates'][0]['geometry']['location']['lat'], indy_jones['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Pirates of the Caribbean', pirates['candidates'][0]['geometry']['location']['lat'], pirates['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Splash Mountain', splash_mt['candidates'][0]['geometry']['location']['lat'], splash_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Big Thunder Mountain Railway', big_thunder['candidates'][0]['geometry']['location']['lat'], big_thunder['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Matterhorn Bobsleds', matterhorn['candidates'][0]['geometry']['location']['lat'], matterhorn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Exit', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']]]\n",
+    "\n",
+    "\n",
+    "df = pd.DataFrame(data, columns=['Ride', 'Latitude', 'Longitude'])\n",
+    "\n",
+    "df.to_csv('Lat_Long.csv')\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "e5586428",
+   "metadata": {},
+   "source": [
+    "### Calculating the Distance Matrix"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 62,
+   "id": "822dfbb3",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from itertools import tee\n",
+    "\n",
+    "#empty list - will be used to store calculated distances\n",
+    "time_list = []\n",
+    "distance_list = []\n",
+    "origin_id_list = []\n",
+    "destination_id_list = []\n",
+    "\n",
+    "# Loop through each row in the data frame using pairwise\n",
+    "for (i1, row1) in df.iterrows():\n",
+    "      #Assign latitude and longitude as origin/departure points\n",
+    "    lat_origin = row1['Latitude'] \n",
+    "    long_origin = row1['Longitude']\n",
+    "    origin = (lat_origin,long_origin)\n",
+    "    origin_id = row1['Ride'] \n",
+    "    \n",
+    "    for (i2, row2) in  df.iterrows():\n",
+    "        #Assign latitude and longitude from the next row as the destination point\n",
+    "        lat_dest = row2['Latitude']   # Save value as lat\n",
+    "        long_dest = row2['Longitude'] # Save value as lat\n",
+    "        destination = (lat_dest,long_dest)\n",
+    "        destination_id = row2['Ride']\n",
+    "        #pass origin and destination variables to distance_matrix function# output in meters\n",
+    "        result = result = gmaps.distance_matrix(origin, destination, mode = 'walking')\n",
+    "\n",
+    "        result_distance = result[\"rows\"][0][\"elements\"][0][\"distance\"][\"text\"]\n",
+    "        result_time = result[\"rows\"][0][\"elements\"][0][\"duration\"][\"text\"]\n",
+    "          \n",
+    "        time_list.append(result_time)\n",
+    "        distance_list.append(result_distance)\n",
+    "        origin_id_list.append(origin_id)\n",
+    "        destination_id_list.append(destination_id)\n",
+    "\n",
+    "distance_matrix = pd.DataFrame()\n",
+    "\n",
+    "distance_matrix['Origin'] = origin_id_list\n",
+    "distance_matrix['Destination'] = destination_id_list\n",
+    "distance_matrix['Time'] = time_list\n",
+    "distance_matrix['Distance'] = distance_list"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "02455f2e",
+   "metadata": {},
+   "source": [
+    "### Converting to distance and time integer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 63,
+   "id": "14e34913",
+   "metadata": {
+    "scrolled": true
+   },
+   "outputs": [],
+   "source": [
+    "# Convert the walking time string to ints\n",
+    "import re\n",
+    "\n",
+    "walk = [] #total wait time \n",
+    "dist = []\n",
+    "\n",
+    "for i in range(0,100):\n",
+    "    time = distance_matrix['Time'][i]\n",
+    "    distance = distance_matrix['Distance'][i]\n",
+    "    t = [float(s) for s in re.findall(r'-?\\d+\\.?\\d*', time)]\n",
+    "    d = [float(b) for b in re.findall(r'-?\\d+\\.?\\d*', distance)]\n",
+    "    walk.append(t[0])\n",
+    "    dist.append(d[0])\n",
+    "    \n",
+    "\n",
+    "distance_matrix['Walk Time'] = walk\n",
+    "distance_matrix['Distance Walk'] = dist\n",
+    "\n",
+    "\n",
+    "distance_matrix.to_csv('distance_matrix.csv')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f8a9f7c1",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "1b24f44f",
+   "metadata": {},
+   "source": [
+    "# Distance Matrix - Dining Complication"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f8206aac",
+   "metadata": {},
+   "source": [
+    "### Creating a Dataframe of all Activities with Lat and Long"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 65,
+   "id": "d0cdcefb",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "data_food = [['Entrance', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Its a Small World', small_world['candidates'][0]['geometry']['location']['lat'],small_world['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Space Mountain', space_mt['candidates'][0]['geometry']['location']['lat'], space_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Star Wars: Rise of Resistance', star_wars['candidates'][0]['geometry']['location']['lat'], star_wars['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Indiana Jones Adventure', indy_jones['candidates'][0]['geometry']['location']['lat'], indy_jones['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Pirates of the Caribbean', pirates['candidates'][0]['geometry']['location']['lat'], pirates['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Splash Mountain', splash_mt['candidates'][0]['geometry']['location']['lat'], splash_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Big Thunder Mountain Railway', big_thunder['candidates'][0]['geometry']['location']['lat'], big_thunder['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Matterhorn Bobsleds', matterhorn['candidates'][0]['geometry']['location']['lat'], matterhorn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Exit', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Plaza Inn - L', plaza_inn['candidates'][0]['geometry']['location']['lat'],plaza_inn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Galactic Grill - L', galactic_grill['candidates'][0]['geometry']['location']['lat'],galactic_grill['candidates'][0]['geometry']['location']['lng']],\n",
+    "        [\"Daisy's Dinner - L\", daisy_dinner['candidates'][0]['geometry']['location']['lat'],daisy_dinner['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Blue Bayou Restaurant - L', blue_bayou['candidates'][0]['geometry']['location']['lat'],blue_bayou['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Bengal Barbeque - L', bengal_bbq['candidates'][0]['geometry']['location']['lat'],bengal_bbq['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['The Golden Horseshoe - L', golden['candidates'][0]['geometry']['location']['lat'],golden['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Red Rose Tavern - L', tavern['candidates'][0]['geometry']['location']['lat'], tavern['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Troubadour Tavern - L', troubadour['candidates'][0]['geometry']['location']['lat'],troubadour['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Plaza Inn - D', plaza_inn['candidates'][0]['geometry']['location']['lat'],plaza_inn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Galactic Grill - D', galactic_grill['candidates'][0]['geometry']['location']['lat'],galactic_grill['candidates'][0]['geometry']['location']['lng']],\n",
+    "        [\"Daisy's Dinner - D\", daisy_dinner['candidates'][0]['geometry']['location']['lat'],daisy_dinner['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Blue Bayou Restaurant - D', blue_bayou['candidates'][0]['geometry']['location']['lat'],blue_bayou['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Bengal Barbeque - D', bengal_bbq['candidates'][0]['geometry']['location']['lat'],bengal_bbq['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['The Golden Horseshoe - D', golden['candidates'][0]['geometry']['location']['lat'],golden['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Red Rose Tavern - D', tavern['candidates'][0]['geometry']['location']['lat'], tavern['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Troubadour Tavern - D', troubadour['candidates'][0]['geometry']['location']['lat'],troubadour['candidates'][0]['geometry']['location']['lng']]] \n",
+    "             \n",
+    "             \n",
+    "dffood = pd.DataFrame(data_food, columns=['Ride', 'Latitude', 'Longitude'])\n",
+    "\n",
+    "# Save for future use\n",
+    "dffood.to_csv('Lat_Long_DFood.csv')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "21460926",
+   "metadata": {},
+   "source": [
+    "### Calculating the Dining Complication Distance Matrix "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 24,
+   "id": "d2dc4d58",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Calculations of Distance Matrix\n",
+    "\n",
+    "from itertools import tee\n",
+    "\n",
+    "#empty list - will be used to store calculated distances\n",
+    "time_list = []\n",
+    "distance_list = []\n",
+    "origin_id_list = []\n",
+    "destination_id_list = []\n",
+    "\n",
+    "# Loop through each row in the data frame using pairwise\n",
+    "for (i1, row1) in dffood.iterrows():\n",
+    "      #Assign latitude and longitude as origin/departure points\n",
+    "    lat_origin = row1['Latitude'] \n",
+    "    long_origin = row1['Longitude']\n",
+    "    origin = (lat_origin,long_origin)\n",
+    "    origin_id = row1['Ride'] \n",
+    "    \n",
+    "    for (i2, row2) in  dffood.iterrows():\n",
+    "        #Assign latitude and longitude from the next row as the destination point\n",
+    "        lat_dest = row2['Latitude']   # Save value as lat\n",
+    "        long_dest = row2['Longitude'] # Save value as lat\n",
+    "        destination = (lat_dest,long_dest)\n",
+    "        destination_id = row2['Ride']\n",
+    "        #pass origin and destination variables to distance_matrix function# output in meters\n",
+    "        result = result = gmaps.distance_matrix(origin, destination, mode = 'walking')\n",
+    "\n",
+    "        result_distance = result[\"rows\"][0][\"elements\"][0][\"distance\"][\"text\"]\n",
+    "        result_time = result[\"rows\"][0][\"elements\"][0][\"duration\"][\"text\"]\n",
+    "          \n",
+    "        time_list.append(result_time)\n",
+    "        distance_list.append(result_distance)\n",
+    "        origin_id_list.append(origin_id)\n",
+    "        destination_id_list.append(destination_id)\n",
+    "\n",
+    "distance_matrix_Dfood = pd.DataFrame()\n",
+    "\n",
+    "distance_matrix_Dfood['Origin'] = origin_id_list\n",
+    "distance_matrix_Dfood['Destination'] = destination_id_list\n",
+    "distance_matrix_Dfood['Time'] = time_list\n",
+    "distance_matrix_Dfood['Distance'] = distance_list"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "18adf03e",
+   "metadata": {},
+   "source": [
+    "### Converting to distance and time integer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 66,
+   "id": "1a80214a",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Convert the walking time string to ints\n",
+    "import re\n",
+    "\n",
+    "walk = [] #total wait time \n",
+    "dist = []\n",
+    "\n",
+    "for i in range(0,676):\n",
+    "    time = distance_matrix_Dfood['Time'][i]\n",
+    "    distance = distance_matrix_Dfood['Distance'][i]\n",
+    "    t = [float(s) for s in re.findall(r'-?\\d+\\.?\\d*', time)]\n",
+    "    d = [float(b) for b in re.findall(r'-?\\d+\\.?\\d*', distance)]\n",
+    "    walk.append(t[0])\n",
+    "    dist.append(d[0])\n",
+    "    \n",
+    "\n",
+    "distance_matrix_Dfood['Walk Time'] = walk\n",
+    "distance_matrix_Dfood['Distance Walk'] = dist\n",
+    "\n",
+    "\n",
+    "distance_matrix_Dfood.to_csv('distance_matrix_Dfood.csv')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "61f81c96",
+   "metadata": {},
+   "source": [
+    "-------------------------------------------------------------------------------------------------------------------"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "bc78a2d3",
+   "metadata": {},
+   "source": [
+    "## Distance Matrix - Prioritization and Downtime Complication"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "7bcb02ba",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Location of the Fireworks\n",
+    "parade = gmaps.find_place('Sleeping Beauty Castle Disneyland California', 'textquery', fields = ['formatted_address', 'geometry','place_id'])"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "4ce530f0",
+   "metadata": {},
+   "source": [
+    "### Creating a Dataframe of all Activities with Lat and Long"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "4adc8076",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Create Dataframe with Exit and FOOD\n",
+    "\n",
+    "data_food = [['Entrance', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Its a Small World 1', small_world['candidates'][0]['geometry']['location']['lat'],small_world['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Its a Small World 2', small_world['candidates'][0]['geometry']['location']['lat'],small_world['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Space Mountain 1', space_mt['candidates'][0]['geometry']['location']['lat'], space_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Space Mountain 2', space_mt['candidates'][0]['geometry']['location']['lat'], space_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Star Wars: Rise of Resistance 1', star_wars['candidates'][0]['geometry']['location']['lat'], star_wars['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Star Wars: Rise of Resistance 2', star_wars['candidates'][0]['geometry']['location']['lat'], star_wars['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Indiana Jones Adventure 1', indy_jones['candidates'][0]['geometry']['location']['lat'], indy_jones['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Indiana Jones Adventure 2', indy_jones['candidates'][0]['geometry']['location']['lat'], indy_jones['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Pirates of the Caribbean 1', pirates['candidates'][0]['geometry']['location']['lat'], pirates['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Pirates of the Caribbean 2', pirates['candidates'][0]['geometry']['location']['lat'], pirates['candidates'][0]['geometry']['location']['lng']],   \n",
+    "        ['Splash Mountain 1', splash_mt['candidates'][0]['geometry']['location']['lat'], splash_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Splash Mountain 2', splash_mt['candidates'][0]['geometry']['location']['lat'], splash_mt['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Big Thunder Mountain Railway 1', big_thunder['candidates'][0]['geometry']['location']['lat'], big_thunder['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Big Thunder Mountain Railway 2', big_thunder['candidates'][0]['geometry']['location']['lat'], big_thunder['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Matterhorn Bobsleds 1', matterhorn['candidates'][0]['geometry']['location']['lat'], matterhorn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Matterhorn Bobsleds 2', matterhorn['candidates'][0]['geometry']['location']['lat'], matterhorn['candidates'][0]['geometry']['location']['lng']],        \n",
+    "        ['Exit', entrance['candidates'][0]['geometry']['location']['lat'],entrance['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Fireworks', parade['candidates'][0]['geometry']['location']['lat'],parade['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Plaza Inn - L', plaza_inn['candidates'][0]['geometry']['location']['lat'],plaza_inn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Galactic Grill - L', galactic_grill['candidates'][0]['geometry']['location']['lat'],galactic_grill['candidates'][0]['geometry']['location']['lng']],\n",
+    "        [\"Daisy's Dinner - L\", daisy_dinner['candidates'][0]['geometry']['location']['lat'],daisy_dinner['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Blue Bayou Restaurant - L', blue_bayou['candidates'][0]['geometry']['location']['lat'],blue_bayou['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Bengal Barbeque - L', bengal_bbq['candidates'][0]['geometry']['location']['lat'],bengal_bbq['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['The Golden Horseshoe - L', golden['candidates'][0]['geometry']['location']['lat'],golden['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Red Rose Tavern - L', tavern['candidates'][0]['geometry']['location']['lat'], tavern['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Troubadour Tavern - L', troubadour['candidates'][0]['geometry']['location']['lat'],troubadour['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Plaza Inn - D', plaza_inn['candidates'][0]['geometry']['location']['lat'],plaza_inn['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Galactic Grill - D', galactic_grill['candidates'][0]['geometry']['location']['lat'],galactic_grill['candidates'][0]['geometry']['location']['lng']],\n",
+    "        [\"Daisy's Dinner - D\", daisy_dinner['candidates'][0]['geometry']['location']['lat'],daisy_dinner['candidates'][0]['geometry']['location']['lng']],\n",
+    "        ['Blue Bayou Restaurant - D', blue_bayou['candidates'][0]['geometry']['location']['lat'],blue_bayou['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Bengal Barbeque - D', bengal_bbq['candidates'][0]['geometry']['location']['lat'],bengal_bbq['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['The Golden Horseshoe - D', golden['candidates'][0]['geometry']['location']['lat'],golden['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Red Rose Tavern - D', tavern['candidates'][0]['geometry']['location']['lat'], tavern['candidates'][0]['geometry']['location']['lng']],     \n",
+    "        ['Troubadour Tavern - D', troubadour['candidates'][0]['geometry']['location']['lat'],troubadour['candidates'][0]['geometry']['location']['lng']]] \n",
+    "             \n",
+    "             \n",
+    "dftrides = pd.DataFrame(data_food, columns=['Ride', 'Latitude', 'Longitude'])\n",
+    "\n",
+    "# Save for future use\n",
+    "dftrides.to_csv('Lat_Long_TRides.csv')"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "f0404fc1",
+   "metadata": {},
+   "source": [
+    "### Calculating the Prioritization and Downtime Complication Distance Matrix "
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": null,
+   "id": "e2e01e16",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "from itertools import tee\n",
+    "\n",
+    "#empty list - will be used to store calculated distances\n",
+    "time_list = []\n",
+    "distance_list = []\n",
+    "origin_id_list = []\n",
+    "destination_id_list = []\n",
+    "\n",
+    "# Loop through each row in the data frame using pairwise\n",
+    "for (i1, row1) in dftrides.iterrows():\n",
+    "      #Assign latitude and longitude as origin/departure points\n",
+    "    lat_origin = row1['Latitude'] \n",
+    "    long_origin = row1['Longitude']\n",
+    "    origin = (lat_origin,long_origin)\n",
+    "    origin_id = row1['Ride'] \n",
+    "    \n",
+    "    for (i2, row2) in  dftrides.iterrows():\n",
+    "        #Assign latitude and longitude from the next row as the destination point\n",
+    "        lat_dest = row2['Latitude']   # Save value as lat\n",
+    "        long_dest = row2['Longitude'] # Save value as lat\n",
+    "        destination = (lat_dest,long_dest)\n",
+    "        destination_id = row2['Ride']\n",
+    "        #pass origin and destination variables to distance_matrix function# output in meters\n",
+    "        result = result = gmaps.distance_matrix(origin, destination, mode = 'walking')\n",
+    "\n",
+    "        result_distance = result[\"rows\"][0][\"elements\"][0][\"distance\"][\"text\"]\n",
+    "        result_time = result[\"rows\"][0][\"elements\"][0][\"duration\"][\"text\"]\n",
+    "          \n",
+    "        time_list.append(result_time)\n",
+    "        distance_list.append(result_distance)\n",
+    "        origin_id_list.append(origin_id)\n",
+    "        destination_id_list.append(destination_id)\n",
+    "\n",
+    "distance_matrix_trides = pd.DataFrame()\n",
+    "\n",
+    "distance_matrix_trides['Origin'] = origin_id_list\n",
+    "distance_matrix_trides['Destination'] = destination_id_list\n",
+    "distance_matrix_trides['Time'] = time_list\n",
+    "distance_matrix_trides['Distance'] = distance_list\n"
+   ]
+  },
+  {
+   "cell_type": "markdown",
+   "id": "7210c4d1",
+   "metadata": {},
+   "source": [
+    "### Converting to distance and time integer"
+   ]
+  },
+  {
+   "cell_type": "code",
+   "execution_count": 46,
+   "id": "539f08d1",
+   "metadata": {},
+   "outputs": [],
+   "source": [
+    "# Convert the walking time string to ints\n",
+    "import re\n",
+    "\n",
+    "walk = [] #total wait time \n",
+    "dist = []\n",
+    "\n",
+    "for i in range(0,1225):\n",
+    "    time = distance_matrix_trides['Time'][i]\n",
+    "    distance = distance_matrix_trides['Distance'][i]\n",
+    "    t = [float(s) for s in re.findall(r'-?\\d+\\.?\\d*', time)]\n",
+    "    d = [float(b) for b in re.findall(r'-?\\d+\\.?\\d*', distance)]\n",
+    "    walk.append(t[0])\n",
+    "    dist.append(d[0])\n",
+    "    \n",
+    "\n",
+    "distance_matrix_trides['Walk Time'] = walk\n",
+    "distance_matrix_trides['Distance Walk'] = dist\n",
+    "\n",
+    "\n",
+    "distance_matrix_trides.to_csv('distance_matrix_trides.csv')\n"
+   ]
+  }
+ ],
+ "metadata": {
+  "kernelspec": {
+   "display_name": "Python 3 (ipykernel)",
+   "language": "python",
+   "name": "python3"
+  },
+  "language_info": {
+   "codemirror_mode": {
+    "name": "ipython",
+    "version": 3
+   },
+   "file_extension": ".py",
+   "mimetype": "text/x-python",
+   "name": "python",
+   "nbconvert_exporter": "python",
+   "pygments_lexer": "ipython3",
+   "version": "3.9.7"
+  }
+ },
+ "nbformat": 4,
+ "nbformat_minor": 5
+}
